@@ -10,12 +10,14 @@ CONFIG += c++17
 
 SOURCES += \
     circle.cpp \
+    drawingwidget.cpp \
     main.cpp \
     mainwindow.cpp \
     wheel.cpp
 
 HEADERS += \
     circle.h \
+    drawingwidget.h \
     mainwindow.h \
     wheel.h
 

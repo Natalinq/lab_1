@@ -2,13 +2,10 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
-#include "circle.h"
-#include "wheel.h"
+#include "drawingwidget.h"
 
 QT_BEGIN_NAMESPACE
-namespace Ui {
-class MainWindow;
-}
+namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
 
 class MainWindow : public QMainWindow
@@ -19,12 +16,17 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
-protected:
-    void paintEvent(QPaintEvent *event) override;
+private slots:
+    void onCreateCircle();
+    void onCreateWheel();
+    void onStartAnimation();
+    void onStopAnimation();
 
 private:
     Ui::MainWindow *ui;
-    Circle *testCircle;
-    Wheel *testWheel;
+    DrawingWidget *drawingWidget;
+    QTimer *animationTimer;
+    bool isAnimating;
 };
+
 #endif // MAINWINDOW_H

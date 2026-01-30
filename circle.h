@@ -3,7 +3,6 @@
 
 #include <QPointF>
 #include <QPainter>
-#include <stdexcept>
 #include <cmath>
 
 class Circle {
@@ -26,12 +25,10 @@ public:
 
     virtual void handleCollision(int width, int height);
 
-    // Сеттеры с валидацией
     virtual void setPosition(double newX, double newY);
     virtual void setRadius(double newRadius);
     virtual void setSpeed(double newVx, double newVy);
 
-    // Геттеры
     QPointF getPosition() const { return QPointF(x, y); }
     double getRadius() const { return radius; }
     bool getIsMoving() const { return isMoving; }

@@ -1,77 +1,142 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
-#include "circle.h"
+#include "drawingwidget.h"
 #include "wheel.h"
-#include <QPainter>
 #include <QTimer>
+#include <QDoubleValidator>
+#include <QIntValidator>
 #include <QMessageBox>
+#include <QVBoxLayout>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
-    , testCircle(nullptr)
-    , testWheel(nullptr)
+    , drawingWidget(nullptr)
+    , animationTimer(new QTimer(this))
+    , isAnimating(false)
 {
     ui->setupUi(this);
 
-    try {
-        testCircle = new Circle(200, 150, 40);
-        testCircle->setSpeed(80, 50);
-        testCircle->startMoving();
+    drawingWidget = new DrawingWidget(ui->drawingArea);
 
-        QTimer *timer = new QTimer(this);
-        connect(timer, &QTimer::timeout, this, [this]() {
-            if (testCircle) {
-                testCircle->move(0.05);
-                testCircle->handleCollision(this->width(), this->height());
-                this->update();
-            }
-        });
-        timer->start(50);
-    } catch (const std::exception &e) {
-        QMessageBox::critical(this, "Ошибка", QString("Не удалось создать круг: %1").arg(e.what()));
-    }
+    QVBoxLayout *drawingLayout = new QVBoxLayout(ui->drawingArea);
+    drawingLayout->setContentsMargins(0, 0, 0, 0);
+    drawingLayout->addWidget(drawingWidget);
 
-    try {
-        testWheel = new Wheel(300, 200, 50, 12);
-        testWheel->setSpeed(60, -40);
-        testWheel->setRotationSpeed(180);
-        testWheel->startMoving();
+    connect(animationTimer, &QTimer::timeout, drawingWidget, &DrawingWidget::animate);
 
-        QTimer *wheelTimer = new QTimer(this);
-        connect(wheelTimer, &QTimer::timeout, this, [this]() {
-            if (testWheel) {  // ← Проверка на nullptr
-                testWheel->move(0.05);
-                testWheel->handleCollision(this->width(), this->height());
-                this->update();
-            }
-        });
-        wheelTimer->start(50);
-    } catch (const std::exception &e) {
-        QMessageBox::critical(this, "Ошибка", QString("Не удалось создать колесо: %1").arg(e.what()));
-    }
+    ui->editX->setValidator(new QDoubleValidator(0, 1000, 2, this));
+    ui->editY->setValidator(new QDoubleValidator(0, 1000, 2, this));
+    ui->editRadius->setValidator(new QDoubleValidator(5, 200, 2, this));
+    ui->editVx->setValidator(new QDoubleValidator(-500, 500, 2, this));
+    ui->editVy->setValidator(new QDoubleValidator(-500, 500, 2, this));
+    ui->editSpokes->setValidator(new QIntValidator(2, 32, this));
+    ui->editRotationSpeed->setValidator(new QDoubleValidator(-720, 720, 2, this));
+
+    connect(ui->btnCreateCircle, &QPushButton::clicked, this, &MainWindow::onCreateCircle);
+    connect(ui->btnCreateWheel, &QPushButton::clicked, this, &MainWindow::onCreateWheel);
+    connect(ui->btnStart, &QPushButton::clicked, this, &MainWindow::onStartAnimation);
+    connect(ui->btnStop, &QPushButton::clicked, this, &MainWindow::onStopAnimation);
+
+    ui->btnStop->setEnabled(false);
+
+    statusBar()->showMessage("Готово: создайте круг или колесо");
 }
 
 MainWindow::~MainWindow()
 {
     delete ui;
-    delete testCircle;
-    delete testWheel;
 }
 
-void MainWindow::paintEvent(QPaintEvent *event)
+void MainWindow::onCreateCircle()
 {
-    Q_UNUSED(event);
+    try {
+        double x = ui->editX->text().toDouble();
+        double y = ui->editY->text().toDouble();
+        double r = ui->editRadius->text().toDouble();
 
-    QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.fillRect(rect(), Qt::white);
+        if (r <= 0 || r > 200) {
+            throw std::invalid_argument("Радиус должен быть от 5 до 200");
+        }
 
-    if (testCircle) {
-        testCircle->draw(painter);
+        Circle *circle = new Circle(x, y, r);
+        circle->setSpeed(ui->editVx->text().toDouble(), ui->editVy->text().toDouble());
+
+        drawingWidget->setObject(circle, false);
+
+        if (isAnimating) {
+            onStopAnimation();
+        }
+
+        statusBar()->showMessage(QString("Создан круг: (%1, %2), радиус %3").arg(x).arg(y).arg(r));
+    } catch (const std::exception &e) {
+        QMessageBox::warning(this, "Ошибка ввода", QString::fromStdString(e.what()));
+    }
+}
+
+void MainWindow::onCreateWheel()
+{
+    try {
+        double x = ui->editX->text().toDouble();
+        double y = ui->editY->text().toDouble();
+        double r = ui->editRadius->text().toDouble();
+        int spokes = ui->editSpokes->text().toInt();
+        double rotSpeed = ui->editRotationSpeed->text().toDouble();
+
+        if (r <= 0 || r > 200) {
+            throw std::invalid_argument("Радиус должен быть от 5 до 200");
+        }
+        if (spokes < 2 || spokes > 32) {
+            throw std::invalid_argument("Количество спиц должно быть от 2 до 32");
+        }
+
+        Wheel *wheel = new Wheel(x, y, r, spokes);
+        wheel->setSpeed(ui->editVx->text().toDouble(), ui->editVy->text().toDouble());
+        wheel->setRotationSpeed(rotSpeed);
+
+        drawingWidget->setObject(wheel, true);
+
+        if (isAnimating) {
+            onStopAnimation();
+        }
+
+        statusBar()->showMessage(QString("Создано колесо: (%1, %2), %3 спиц").arg(x).arg(y).arg(spokes));
+    } catch (const std::exception &e) {
+        QMessageBox::warning(this, "Ошибка ввода", QString::fromStdString(e.what()));
+    }
+}
+
+void MainWindow::onStartAnimation()
+{
+    if (!drawingWidget->getCurrentObject()) {
+        QMessageBox::warning(this, "Внимание", "Сначала создайте объект (круг или колесо)");
+        return;
     }
 
-    if (testWheel) {
-        testWheel->draw(painter);
+    drawingWidget->getCurrentObject()->startMoving();
+
+    animationTimer->start(50);
+    isAnimating = true;
+
+    ui->btnStart->setEnabled(false);
+    ui->btnStop->setEnabled(true);
+
+    statusBar()->showMessage("Анимация запущена");
+}
+
+void MainWindow::onStopAnimation()
+{
+    if (isAnimating) {
+        animationTimer->stop();
+        isAnimating = false;
+
+        if (drawingWidget->getCurrentObject()) {
+            drawingWidget->getCurrentObject()->stopMoving();
+        }
+
+        ui->btnStart->setEnabled(true);
+        ui->btnStop->setEnabled(false);
+
+        statusBar()->showMessage("Анимация остановлена");
     }
 }
